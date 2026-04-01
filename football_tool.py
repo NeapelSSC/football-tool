@@ -143,12 +143,24 @@ with tabs[0]:
 with tabs[1]:
     st.header("Spieler-Datenbank")
     df_players = load_players()
+    
+    # Lesbare Dropdowns für Verein & Position
     clubs = ["Alle"] + sorted(df_players["Verein"].unique())
     positions = ["Alle"] + sorted(df_players["Position"].unique())
 
-    selected_club = st.selectbox("Verein", clubs)
-    selected_position = st.selectbox("Position", positions)
+    # Dropdowns mit lesbarem Hintergrund
+    selected_club = st.selectbox(
+        "Verein", clubs,
+        key="club_select",
+        label_visibility="visible"
+    )
+    selected_position = st.selectbox(
+        "Position", positions,
+        key="position_select",
+        label_visibility="visible"
+    )
 
+    # Filter anwenden
     filtered = df_players.copy()
     if selected_club != "Alle":
         filtered = filtered[filtered["Verein"] == selected_club]
@@ -156,7 +168,6 @@ with tabs[1]:
         filtered = filtered[filtered["Position"] == selected_position]
 
     grouped = filtered.groupby("Verein")
-
     for club, group in grouped:
         st.subheader(f"🏟️ {club}")
         total_value = group["Marktwert"].sum()
@@ -183,7 +194,7 @@ with tabs[3]:
     st.write("Coming soon...")
 
 # -------------------------------
-# IMPORT
+# IMPORT & CSV Download
 # -------------------------------
 with tabs[4]:
     st.header("Import")
@@ -205,7 +216,9 @@ with tabs[4]:
                     st.warning(f"Fehler: {line}")
         st.success("Import fertig!")
 
-    st.subheader("CSV Download / Upload")
+    # -------------------------------
+    # CSV Download Button
+    # -------------------------------
     if os.path.exists("players.csv"):
         with open("players.csv", "rb") as file:
             st.download_button(
@@ -215,6 +228,9 @@ with tabs[4]:
                 mime="text/csv"
             )
 
+    # -------------------------------
+    # CSV Upload Button
+    # -------------------------------
     uploaded_file = st.file_uploader("CSV hochladen", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
