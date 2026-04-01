@@ -1,13 +1,21 @@
 import streamlit as st
-import sqlite3
-import re
+import pandas as pd
+import os
 
 st.set_page_config(page_title="Football Tool", layout="wide")
 
+# -------------------------------
+# CSS für Layout & Farben
+# -------------------------------
 st.markdown("""
 <style>
+/* Hintergrund der App */
 .stApp { background-color: #0e1a2b; }
+
+/* Überschriften / Text */
 h1, h2, h3, h4, h5, h6, p, div { color: white; }
+
+/* Tabs */
 button[data-baseweb="tab"] {
     background-color: #1c2b3a;
     color: white;
@@ -16,42 +24,71 @@ button[data-baseweb="tab"] {
 button[data-baseweb="tab"][aria-selected="true"] {
     background-color: #0099FF;
 }
+
+/* Buttons */
 .stButton>button {
     background-color: #0099FF;
     color: white;
     border-radius: 8px;
 }
+
+/* Dropdowns */
+div[data-baseweb="select"] > div {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+div[data-baseweb="select"] span {
+    color: #000000 !important;
+}
+ul {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+}
+li:hover {
+    background-color: #e6e6e6 !important;
+}
+label {
+    color: #ffffff !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
-conn = sqlite3.connect("football.db", check_same_thread=False)
-c = conn.cursor()
+# -------------------------------
+# CSV Funktionen
+# -------------------------------
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS players (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT,
-    age INTEGER,
-    position TEXT,
-    club TEXT,
-    market_value TEXT
-)
-''')
+PLAYERS_CSV = "players.csv"
+MATCHES_CSV = "matches.csv"
 
-c.execute('''
-CREATE TABLE IF NOT EXISTS matches (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_a TEXT,
-    team_b TEXT,
-    formation_a TEXT,
-    formation_b TEXT,
-    market_value_a TEXT,
-    market_value_b TEXT
-)
-''')
+def load_players():
+    if os.path.exists(PLAYERS_CSV):
+        return pd.read_csv(PLAYERS_CSV)
+    else:
+        return pd.DataFrame(columns=["Name", "Alter", "Position", "Verein", "Marktwert"])
 
-conn.commit()
+def save_player(name, age, position, club, market_value):
+    df = load_players()
+    new_row = pd.DataFrame([[name, age, position, club, market_value]],
+                           columns=df.columns)
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_csv(PLAYERS_CSV, index=False)
 
+def load_matches():
+    if os.path.exists(MATCHES_CSV):
+        return pd.read_csv(MATCHES_CSV)
+    else:
+        return pd.DataFrame(columns=["Team A", "Team B", "Formation A", "Formation B", "MW A", "MW B"])
+
+def save_match(team_a, team_b, form_a, form_b, mw_a, mw_b):
+    df = load_matches()
+    new_row = pd.DataFrame([[team_a, team_b, form_a, form_b, mw_a, mw_b]],
+                           columns=df.columns)
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_csv(MATCHES_CSV, index=False)
+
+# -------------------------------
+# Tabs
+# -------------------------------
 tabs = st.tabs([
     "Team",
     "Datenbank Spieler",
@@ -60,30 +97,28 @@ tabs = st.tabs([
     "Import"
 ])
 
+# -------------------------------
+# TEAM TAB
+# -------------------------------
 with tabs[0]:
     if "selected_player" not in st.session_state:
         st.session_state.selected_player = None
 
-    squad = c.execute(
-        "SELECT name, age, position, market_value FROM players WHERE club = 'SSC Neapel'"
-    ).fetchall()
+    df_players = load_players()
+    napoli_players = df_players[df_players["Verein"] == "SSC Neapel"]
 
-    if st.session_state.selected_player:
+    if st.session_state.selected_player is not None:
         player = st.session_state.selected_player
-        st.header(f"👤 {player[0]}")
-        st.write(f"Position: {player[2]}")
-        st.write(f"Alter: {player[1]}")
-        st.write(f"Marktwert: {int(player[3]):,} €")
-
+        st.header(f"👤 {player['Name']}")
+        st.write(f"Position: {player['Position']}")
+        st.write(f"Alter: {player['Alter']}")
+        st.write(f"Marktwert: {int(player['Marktwert']):,} €")
         if st.button("⬅ Zurück"):
             st.session_state.selected_player = None
     else:
-        st.subheader("Kader")
+        st.subheader("Kader SSC Neapel")
         cols = st.columns(4)
-
-        for i, p in enumerate(squad):
-            name, age, position, value = p
-
+        for i, row in napoli_players.iterrows():
             with cols[i % 4]:
                 st.markdown(f"""
                 <div style="
@@ -93,118 +128,95 @@ with tabs[0]:
                     text-align:center;
                     margin-bottom:15px;
                 ">
-                    <h4>{name}</h4>
-                    <p>{position}</p>
-                    <p>{age} Jahre</p>
-                    <p><b>{int(value):,} €</b></p>
+                    <h4>{row['Name']}</h4>
+                    <p>{row['Position']}</p>
+                    <p>{row['Alter']} Jahre</p>
+                    <p><b>{int(row['Marktwert']):,} €</b></p>
                 </div>
                 """, unsafe_allow_html=True)
+                if st.button(f"Profil {row['Name']}", key=row['Name']):
+                    st.session_state.selected_player = row
 
-                if st.button(f"Profil {name}", key=name):
-                    st.session_state.selected_player = p
-
+# -------------------------------
+# DATENBANK SPIELER
+# -------------------------------
 with tabs[1]:
     st.header("Spieler-Datenbank")
+    df_players = load_players()
+    clubs = ["Alle"] + sorted(df_players["Verein"].unique())
+    positions = ["Alle"] + sorted(df_players["Position"].unique())
 
-    clubs = [row[0] for row in c.execute("SELECT DISTINCT club FROM players")]
-    positions = [row[0] for row in c.execute("SELECT DISTINCT position FROM players")]
+    selected_club = st.selectbox("Verein", clubs)
+    selected_position = st.selectbox("Position", positions)
 
-    selected_club = st.selectbox("Verein", ["Alle"] + clubs)
-    selected_position = st.selectbox("Position", ["Alle"] + positions)
-
-    query = "SELECT name, age, position, club, market_value FROM players WHERE 1=1"
-    params = []
-
+    filtered = df_players.copy()
     if selected_club != "Alle":
-        query += " AND club = ?"
-        params.append(selected_club)
-
+        filtered = filtered[filtered["Verein"] == selected_club]
     if selected_position != "Alle":
-        query += " AND position = ?"
-        params.append(selected_position)
+        filtered = filtered[filtered["Position"] == selected_position]
 
-    players = c.execute(query, params).fetchall()
+    grouped = filtered.groupby("Verein")
 
-    grouped = {}
-
-    for p in players:
-        club = p[3]
-        grouped.setdefault(club, []).append(p)
-
-    for club, squad in grouped.items():
+    for club, group in grouped:
         st.subheader(f"🏟️ {club}")
-
-        total_value = 0
-        ages = []
-
-        squad_sorted = sorted(squad, key=lambda x: int(x[4]), reverse=True)
-
-        for p in squad_sorted:
-            name, age, position, club, value = p
-            total_value += int(value)
-            ages.append(int(age))
-
-            st.write(f"{name} | {age} | {position} | {int(value):,} €")
-
-        avg_age = sum(ages) / len(ages) if ages else 0
-
-        st.write(f"Spieler: {len(squad)}")
-        st.write(f"Gesamtwert: {total_value:,} €")
-        st.write(f"Ø Alter: {avg_age:.1f}")
-
+        total_value = group["Marktwert"].sum()
+        avg_age = group["Alter"].mean()
+        for _, p in group.iterrows():
+            st.write(f"{p['Name']} | {p['Alter']} | {p['Position']} | {int(p['Marktwert']):,} €")
+        st.write(f"Spieler: {len(group)} | Gesamtwert: {int(total_value):,} € | Ø Alter: {avg_age:.1f}")
         st.divider()
 
+# -------------------------------
+# SPIELBERICHTE
+# -------------------------------
 with tabs[2]:
     st.header("Spielberichte")
+    df_matches = load_matches()
+    for _, m in df_matches.iterrows():
+        st.write(f"{m['Team A']} vs {m['Team B']} | {m['Formation A']} vs {m['Formation B']} | MW: {m['MW A']} - {m['MW B']}")
 
-    matches = c.execute("SELECT team_a, team_b, formation_a, formation_b, market_value_a, market_value_b FROM matches").fetchall()
-
-    for m in matches:
-        st.write(f"{m[0]} vs {m[1]} | {m[2]} vs {m[3]} | MW: {m[4]} - {m[5]}")
-
+# -------------------------------
+# LEISTUNG
+# -------------------------------
 with tabs[3]:
     st.header("Leistung")
     st.write("Coming soon...")
 
+# -------------------------------
+# IMPORT
+# -------------------------------
 with tabs[4]:
     st.header("Import")
-
     text_input = st.text_area("Daten einfügen")
 
     if st.button("Importieren"):
-
         lines = text_input.split("\n")
-
         for line in lines:
             line = line.strip()
-
             if "\t" in line:
                 try:
                     parts = line.split("\t")
-
-                    position = parts[0]
-                    name = parts[1]
-                    club = parts[2]
-                    age = parts[4].replace(" Jahre", "")
-                    value = parts[5].replace(" EUR", "").replace(".", "")
-
-                    c.execute(
-                        "INSERT INTO players (name, age, position, club, market_value) VALUES (?, ?, ?, ?, ?)",
-                        (name, age, position, club, value)
-                    )
+                    if len(parts) >= 6:
+                        position, name, club, _, age, value = parts[:6]
+                        age = int(age.replace(" Jahre", "").strip())
+                        value = int(value.replace(" EUR", "").replace(".", "").strip())
+                        save_player(name, age, position, club, value)
                 except:
                     st.warning(f"Fehler: {line}")
-
-                continue
-
-            if "," in line:
-                parts = line.split(",")
-
-                if len(parts) == 5:
-                    c.execute("INSERT INTO players (name, age, position, club, market_value) VALUES (?, ?, ?, ?, ?)", parts)
-
-                elif len(parts) == 6:
-                    c.execute("INSERT INTO matches (team_a, team_b, formation_a, formation_b, market_value_a, market_value_b) VALUES (?, ?, ?, ?, ?, ?)", parts)
-
-        conn.commit()
         st.success("Import fertig!")
+
+    st.subheader("CSV Download / Upload")
+    if os.path.exists("players.csv"):
+        with open("players.csv", "rb") as file:
+            st.download_button(
+                label="Spieler CSV herunterladen",
+                data=file,
+                file_name="players.csv",
+                mime="text/csv"
+            )
+
+    uploaded_file = st.file_uploader("CSV hochladen", type="csv")
+    if uploaded_file:
+        df = pd.read_csv(uploaded_file)
+        df.to_csv("players.csv", index=False)
+        st.success("CSV geladen!")
