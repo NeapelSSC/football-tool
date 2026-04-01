@@ -4,12 +4,15 @@ import os
 
 st.set_page_config(page_title="Football Tool", layout="wide")
 
+PLAYERS_CSV = "players.csv"
+MATCHES_CSV = "matches.csv"
+
 # -------------------------------
-# CSS für Layout & Farben
+# CSS Styling für Napoli-Farben + Lesbare Dropdowns
 # -------------------------------
 st.markdown("""
 <style>
-/* Hintergrund der App */
+/* App Hintergrund */
 .stApp { background-color: #0e1a2b; }
 
 /* Überschriften / Text */
@@ -32,7 +35,7 @@ button[data-baseweb="tab"][aria-selected="true"] {
     border-radius: 8px;
 }
 
-/* Dropdowns */
+/* Dropdown Hintergrund + Text */
 div[data-baseweb="select"] > div {
     background-color: #ffffff !important;
     color: #000000 !important;
@@ -45,7 +48,7 @@ ul {
     color: #000000 !important;
 }
 li:hover {
-    background-color: #e6e6e6 !important;
+    background-color: #e6f0ff !important;
 }
 label {
     color: #ffffff !important;
@@ -56,20 +59,15 @@ label {
 # -------------------------------
 # CSV Funktionen
 # -------------------------------
-
-PLAYERS_CSV = "players.csv"
-MATCHES_CSV = "matches.csv"
-
 def load_players():
     if os.path.exists(PLAYERS_CSV):
         return pd.read_csv(PLAYERS_CSV)
     else:
-        return pd.DataFrame(columns=["Name", "Alter", "Position", "Verein", "Marktwert"])
+        return pd.DataFrame(columns=["Name","Alter","Position","Verein","Marktwert"])
 
 def save_player(name, age, position, club, market_value):
     df = load_players()
-    new_row = pd.DataFrame([[name, age, position, club, market_value]],
-                           columns=df.columns)
+    new_row = pd.DataFrame([[name, age, position, club, market_value]], columns=df.columns)
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(PLAYERS_CSV, index=False)
 
@@ -81,8 +79,7 @@ def load_matches():
 
 def save_match(team_a, team_b, form_a, form_b, mw_a, mw_b):
     df = load_matches()
-    new_row = pd.DataFrame([[team_a, team_b, form_a, form_b, mw_a, mw_b]],
-                           columns=df.columns)
+    new_row = pd.DataFrame([[team_a, team_b, form_a, form_b, mw_a, mw_b]], columns=df.columns)
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv(MATCHES_CSV, index=False)
 
@@ -144,23 +141,13 @@ with tabs[1]:
     st.header("Spieler-Datenbank")
     df_players = load_players()
     
-    # Lesbare Dropdowns für Verein & Position
+    # Dropdowns filterbar & lesbar
     clubs = ["Alle"] + sorted(df_players["Verein"].unique())
     positions = ["Alle"] + sorted(df_players["Position"].unique())
 
-    # Dropdowns mit lesbarem Hintergrund
-    selected_club = st.selectbox(
-        "Verein", clubs,
-        key="club_select",
-        label_visibility="visible"
-    )
-    selected_position = st.selectbox(
-        "Position", positions,
-        key="position_select",
-        label_visibility="visible"
-    )
+    selected_club = st.selectbox("Verein", clubs, key="club_select", label_visibility="visible")
+    selected_position = st.selectbox("Position", positions, key="position_select", label_visibility="visible")
 
-    # Filter anwenden
     filtered = df_players.copy()
     if selected_club != "Alle":
         filtered = filtered[filtered["Verein"] == selected_club]
@@ -194,11 +181,11 @@ with tabs[3]:
     st.write("Coming soon...")
 
 # -------------------------------
-# IMPORT & CSV Download
+# IMPORT TAB
 # -------------------------------
 with tabs[4]:
     st.header("Import")
-    text_input = st.text_area("Daten einfügen")
+    text_input = st.text_area("Daten einfügen (Tab-getrennt)")
 
     if st.button("Importieren"):
         lines = text_input.split("\n")
@@ -209,18 +196,16 @@ with tabs[4]:
                     parts = line.split("\t")
                     if len(parts) >= 6:
                         position, name, club, _, age, value = parts[:6]
-                        age = int(age.replace(" Jahre", "").strip())
-                        value = int(value.replace(" EUR", "").replace(".", "").strip())
+                        age = int(age.replace(" Jahre","").strip())
+                        value = int(value.replace(" EUR","").replace(".","").strip())
                         save_player(name, age, position, club, value)
                 except:
-                    st.warning(f"Fehler: {line}")
-        st.success("Import fertig!")
+                    st.warning(f"Fehler bei Zeile: {line}")
+        st.success("Import abgeschlossen!")
 
-    # -------------------------------
     # CSV Download Button
-    # -------------------------------
-    if os.path.exists("players.csv"):
-        with open("players.csv", "rb") as file:
+    if os.path.exists(PLAYERS_CSV):
+        with open(PLAYERS_CSV, "rb") as file:
             st.download_button(
                 label="Spieler CSV herunterladen",
                 data=file,
@@ -228,11 +213,9 @@ with tabs[4]:
                 mime="text/csv"
             )
 
-    # -------------------------------
     # CSV Upload Button
-    # -------------------------------
     uploaded_file = st.file_uploader("CSV hochladen", type="csv")
     if uploaded_file:
         df = pd.read_csv(uploaded_file)
-        df.to_csv("players.csv", index=False)
-        st.success("CSV geladen!")
+        df.to_csv(PLAYERS_CSV, index=False)
+        st.success("CSV erfolgreich geladen!")
